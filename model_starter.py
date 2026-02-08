@@ -10,13 +10,20 @@ import torch.optim as optim
 
 #TODO:Inherit from your desired classifier to create a custom classifier.
 class TraditionalClassifier():
-    def __init__(self):
+    def __init__(self,k=5):
         # TODO: Pass the parameters you require to your selected classifier
         super().__init__()
-        
+        self.k = k
+        self.classifier = KNeighborsClassifier(n_neighbors=k)
+    
+    def fit(self, X, y):
+        self.classifier.fit(X, y)
+    
+    def predict(self, X):
+        return self.classifier.predict(X)
 
-    def evaluate(self):
-         """
+    def evaluate(self,train_feats, train_labels, test_feats, test_labels):
+        """
         TODO:
         1. Predict labels for the training set.
         2. Predict labels for the testing set.
@@ -24,7 +31,15 @@ class TraditionalClassifier():
         4. Compute testing accuracy using accuracy_score.
         5. Print the training and testing accuracy percentages.
         """
-         raise NotImplementedError
+        pred_train = self.classifier.predict(train_feats)
+        pred_test = self.classifier.predict(test_feats)
+
+        # Accuracy
+        train_acc = accuracy_score(train_labels, pred_train) * 100
+        test_acc = accuracy_score(test_labels, pred_test) * 100
+
+        print(f"Training Accuracy: {train_acc:.2f}%")
+        print(f"Testing Accuracy:  {test_acc:.2f}%")
 
 class MLP(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, activation=nn.ReLU, num_layers=2):
