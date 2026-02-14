@@ -110,6 +110,23 @@ def convert_features_to_loader(
     9. Return the `train_loader` and `test_loader` for use in model training and evaluation.
 
     """
+    trainFeatsTensor = torch.tensor(train_feats_proj, dtype=torch.float32)
+
+    trainLabelsTensor = torch.tensor(train_labels, dtype=torch.long)
+
+    trainDataset = TensorDataset(trainFeatsTensor, trainLabelsTensor)
+
+    trainLoader = DataLoader(trainDataset, batch_size=batch_size, shuffle=True)
+
+    testFeatsTensor = torch.tensor(test_feats_proj, dtype=torch.float32)
+
+    testLabelsTensor = torch.tensor(test_labels, dtype=torch.long)
+
+    testDataset = TensorDataset(testFeatsTensor, testLabelsTensor)
+
+    testLoader = DataLoader(testDataset, batch_size=batch_size, shuffle=False)
+
+    return trainLoader, testLoader
 
 
 def cnn_learning(
@@ -168,8 +185,8 @@ def deep_learning(
     input_dim=0,
     output_dim=0,
     hidden_dim=64,
-    num_layers=0,
-    batch_size=0,
+    num_layers=2,
+    batch_size=128,
     learning_rate=0.001,
     epochs=100,
 ):
@@ -209,8 +226,8 @@ def deep_learning(
             total += batch_labels.size(0)
             correct += (predicted == batch_labels).sum().item()
 
-    accuracy = correct / total * 100
-    print(f"Deep Learning Test Accuracy: {accuracy:.2f}%")
+    testAccuracy = correct / total * 100
+    print(f"Deep Learning Test Accuracy: {testAccuracy:.2f}%")
 
     correct = 0
     total = 0
@@ -221,8 +238,10 @@ def deep_learning(
             total += batch_labels.size(0)
             correct += (predicted == batch_labels).sum().item()
 
-    accuracy = correct / total * 100
-    print(f"Deep Learning Train Accuracy: {accuracy:.2f}%")
+    trainAccuracy = correct / total * 100
+    print(f"Deep Learning Train Accuracy: {trainAccuracy:.2f}%")
+
+    return testAccuracy, trainAccuracy
 
 
 def perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_labels):
@@ -230,7 +249,6 @@ def perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_la
     classifiers = {
         "traditional_classifier": TraditionalClassifier(),
         "deep_learning": deep_learning,
-        "CNN": cnn_learning,
     }
 
     for name, clf in classifiers.items():
@@ -254,12 +272,21 @@ def perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_la
             # See example_classification function for plotting confusion matrices and testing on the merged classes
 
         else:
-            # TODO: Call deep learning and CNNfunction to train and evaluate the model
-            """clf(train_feats_proj, train_labels, test_feats_proj, test_labels)"""
-            continue
+            # TODO: Call deep learning and CNN function to train and evaluate the model
+            input_dim = int(train_feats_proj.shape[1])
+            output_dim = int(np.max(train_labels) + 1)
+            testAccuracy, trainAccuracy = clf(
+                train_feats_proj,
+                train_labels,
+                test_feats_proj,
+                test_labels,
+                input_dim=input_dim,
+                output_dim=output_dim,
+            )
+            return trainAccuracy, testAccuracy
 
 
-def load_new_dataset(dataset_path, verbose=True, subject_index=9, features=["euler"]):
+def load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["euler"]):
 
     # Determine which features to load in
     df_headers = pd.read_csv(dataset_path, nrows=0)
