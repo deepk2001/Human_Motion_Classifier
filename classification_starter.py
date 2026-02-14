@@ -6,6 +6,7 @@ file that you add code to.)
 """
 
 import json
+import pandas as pd
 import os
 from numpy.ma.core import mean
 import torch
@@ -164,27 +165,24 @@ def deep_learning(
     train_labels,
     test_feats_proj,
     test_labels,
+    input_dim=0,
+    output_dim=0,
     hidden_dim=64,
-    num_layers=2,
-    batch_size=128,
+    num_layers=0,
+    batch_size=0,
     learning_rate=0.001,
-    epochs=50,
+    epochs=100,
 ):
-
-    # infer dims from data
-    input_dim = int(train_feats_proj.shape[1])
-    output_dim = int(
-        np.max(train_labels) + 1
-    )  # assumes labels are 0..C-1 (yours are 0..45)
-
     model = MLP(input_dim, output_dim, hidden_dim, nn.ReLU, num_layers)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
     scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
 
     train_loader, test_loader = convert_features_to_loader(
         train_feats_proj, train_labels, test_feats_proj, test_labels, batch_size
     )
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -261,22 +259,59 @@ def perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_la
             continue
 
 
-def load_new_dataset(dataset_path, verbose=True, subject_index=9):
-    dataset = np.loadtxt(dataset_path, delimiter=",", dtype=float, skiprows=1)
-    # Extract `person_idxs` (last column)
+def load_new_dataset(dataset_path, verbose=True, subject_index=9, features=["euler"]):
+
+    # Determine which features to load in
+    df_headers = pd.read_csv(dataset_path, nrows=0)
+    col_names = df_headers.columns.tolist()
+
+    features_to_use = features
+    selected_indices = []
+
+    for j in range(17):
+        # 1. Add Positions if requested
+        if "positions" in features_to_use:
+            selected_indices.extend(
+                [
+                    col_names.index(f"joint{j}_x"),
+                    col_names.index(f"joint{j}_y"),
+                    col_names.index(f"joint{j}_z"),
+                ]
+            )
+
+        # 2. Add Euler if requested
+        if "eulers" in features_to_use:
+            selected_indices.extend(
+                [
+                    col_names.index(f"joint{j}_yaw"),
+                    col_names.index(f"joint{j}_pitch"),
+                    col_names.index(f"joint{j}_roll"),
+                ]
+            )
+        # 3. Add Confidence always
+        selected_indices.append(col_names.index(f"joint{j}_conf"))
+
+    dataset = np.loadtxt(dataset_path, delimiter=",", skiprows=1)
+
+    # ...,Label,Subject,Take
     person_idxs = dataset[:, -2]  # All rows, 2nd last column
     labels = dataset[:, -3]  # All rows, 3rd last column
 
-    feats = dataset[:, :-3].T  # All rows, all columns except the last three, transposed
+    # Feature extraction based on selected features
+    feats = dataset[:, selected_indices]
+
     # TODO: Feature selection (EXTRA CREDIT). You can comment out the feature selection part if you are not implementing it.
     # feats = feature_selection(feats)
-    feature_mask = np.var(feats, axis=1) > 0
+
+    # Here we just use 0 variance feature removal as an example
+    feature_mask = np.var(feats, axis=0) > 0
+    feats = feats[:, feature_mask]
+
     # Leave one subject out (LOSO)
     train_mask = person_idxs != subject_index
-
-    train_feats = feats[feature_mask, :][:, train_mask].T
+    train_feats = feats[train_mask, :]
     train_labels = labels[train_mask].astype(int)
-    test_feats = feats[feature_mask, :][:, ~train_mask].T
+    test_feats = feats[~train_mask, :]
     test_labels = labels[~train_mask].astype(int)
 
     if verbose:
@@ -310,7 +345,7 @@ def example_classification(args, class_info):
     """
     # Assume this returns train_feats, train_labels, test_feats, test_labels
     train_feats, train_labels, test_feats, test_labels = load_new_dataset(
-        dataset_path=args.dataset_path, subject_index=9
+        dataset_path=args.dataset_path, subject_index=9, features=args.features
     )
 
     pred_train_labels, pred_test_labels = lda_projection(
@@ -326,6 +361,11 @@ def example_classification(args, class_info):
     print(f"Unmerged LDA Train Accuracy: {train_acc:.2f}% ± {train_std:.2f}")
     print(f"Unmerged LDA Test Accuracy: {test_acc:.2f}% ± {test_std:.2f}")
 
+    # Sub dir will be based on features used
+    sub_dir = "_".join(args.features)
+    results_dir = os.path.join("results", sub_dir)
+
+    # The below function plots the confusion matrix with the actual class names
     plot_conf_mat(
         targets=train_labels,
         predictions=pred_train_labels,
@@ -333,6 +373,7 @@ def example_classification(args, class_info):
         filename="unmerged_train_confusion_matrix.png",
         class_names=class_info["names"]["short_unmerged"],
         save_prefix="LDA",
+        results_dir=results_dir,
     )
     plot_conf_mat(
         targets=test_labels,
@@ -341,6 +382,17 @@ def example_classification(args, class_info):
         filename="unmerged_test_confusion_matrix.png",
         class_names=class_info["names"]["short_unmerged"],
         save_prefix="LDA",
+        results_dir=results_dir,
+    )
+    # Alternatively, you can use the class indices instead of names
+    plot_conf_mat(
+        targets=test_labels,
+        predictions=pred_test_labels,
+        title="LDA Testing Confusion Matrix (Unmerged)",
+        filename="unmerged_test_confusion_matrix_indices.png",
+        class_names=None,
+        save_prefix="LDA",
+        results_dir=results_dir,
     )
 
     # 2. Merged Results
@@ -364,6 +416,7 @@ def example_classification(args, class_info):
         filename="merged_train_confusion_matrix.png",
         class_names=class_info["names"]["short_merged"],
         save_prefix="LDA",
+        results_dir=results_dir,
     )
     plot_conf_mat(
         targets=merged_test_labels,
@@ -372,6 +425,7 @@ def example_classification(args, class_info):
         filename="merged_test_confusion_matrix.png",
         class_names=class_info["names"]["short_merged"],
         save_prefix="LDA",
+        results_dir=results_dir,
     )
 
 
@@ -444,10 +498,10 @@ def fisher_projection(train_feats, train_labels):
     return eigenVectors
 
 
-def classification():
+def classification(args):
     """
-      TODO: Implement Leave-One-Subject-Out (LOSO) cross-validation.
-      You dont need to implement this fully here. You can modify this as you wnat
+     TODO: Implement Leave-One-Subject-Out (LOSO) cross-validation.
+     You dont need to implement this fully here. You can modify this as you wnat
 
      Loop over all subjects:
     - Each iteration, select one subject index as the test set.
@@ -464,7 +518,9 @@ def classification():
     accuracyWithoutProjectionTrain = []
     for subject in range(numSubjects):
         train_feats, train_labels, test_feats, test_labels = load_new_dataset(
-            dataset_path="Datasets/N_20_Takes_2.csv", subject_index=subject + 1
+            dataset_path="Datasets/N_20_Takes_2.csv",
+            subject_index=subject + 1,
+            features=args.features,
         )
         train_accuracy, test_accuracy = perform_traditional(
             train_feats, train_labels, test_feats, test_labels
@@ -493,24 +549,11 @@ def main():
     args = parse_args()
     with open("assets/class_info.json", "r") as f:
         class_info = json.load(f)
-
-    if create_dataset:
-        create_dataset_file(
-            data_path="Data",
-            keypose_csv="assets/keyposes.csv",
-            output_dir="Datasets",
-            num_takes=2,
-            subjects=list(range(1, 11)),
-            downsample_rate=5,
-            n=20,
-            seed=42,
-        )
     example_classification(args=args, class_info=class_info)
 
     # TODO: Call the classification function to perform LOSO classification
-    classification()
+    classification(args=args)
 
 
 if __name__ == "__main__":
-    create_dataset = True
     main()

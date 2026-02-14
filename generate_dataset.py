@@ -1,125 +1,180 @@
 import pandas as pd
 import numpy as np
 import os
+import argparse
 import h5py
+from scipy.spatial.transform import Rotation
+
+# 17-joint kinematic parent map
+PARENT_MAP = {
+    13: 12,
+    16: 13,
+    15: 16,
+    14: 15,  # Spine
+    0: 15,
+    1: 0,
+    2: 1,  # Right Arm
+    3: 15,
+    4: 3,
+    5: 4,  # Left Arm
+    6: 12,
+    7: 6,
+    8: 7,  # Right Leg
+    9: 12,
+    10: 9,
+    11: 10,  # Left Leg
+}
+
 
 def get_joint_headers(num_joints):
     headers = []
     for i in range(num_joints):
-        headers.extend([f'joint{i}_x', f'joint{i}_y', f'joint{i}_z', f'joint{i}_conf'])
+        headers.extend(
+            [
+                f"joint{i}_x",
+                f"joint{i}_y",
+                f"joint{i}_z",
+                f"joint{i}_yaw",
+                f"joint{i}_pitch",
+                f"joint{i}_roll",
+                f"joint{i}_conf",
+            ]
+        )
     return headers
 
-pelvis_center_idx = 12  # (unused in your snippet, keeping it)
 
-def create_dataset_file(
-    data_path="Data",
-    keypose_csv="assets/keyposes.csv",
-    output_dir="Datasets",
-    num_takes=2,
-    subjects=None,
-    downsample_rate=5,
-    n=20,
-    seed=42
-):
+def get_euler_angles_from_points(child_pos, parent_pos, ref_pos):
     """
-    Generate simplified Keypose CSV without argparse.
+    Derives a 3D coordinate frame to ensure non-zero roll.
+    Uses the bone vector as one axis and a reference (e.g. pelvis) to define the plane.
     """
-    if subjects is None:
-        subjects = list(range(1, 11))
+    # 1. Primary bone vector (Target Z-axis)
+    v_bone = (child_pos - parent_pos).astype(np.float64)
+    norm_v = np.linalg.norm(v_bone)
+    if norm_v < 1e-6:
+        return [0.0, 0.0, 0.0]
+    z_axis = v_bone / norm_v
 
-    if seed is not None:
-        np.random.seed(seed)
+    # 2. Reference vector to define 'Up' (Ensures non-zero roll)
+    # Using the vector from parent to pelvis to create a local plane
+    v_ref = (ref_pos - parent_pos).astype(np.float64)
+    norm_ref = np.linalg.norm(v_ref)
+    if norm_ref < 1e-6:
+        # Fallback to global up if joint is at the root
+        up = np.array([0.0, 0.0, 1.0])
+    else:
+        up = v_ref / norm_ref
 
-    os.makedirs(output_dir, exist_ok=True)
-    output_filename = f"N_{n}_Takes_{num_takes}.csv"
-    output_path = os.path.join(output_dir, output_filename)
+    # 3. Construct Orthogonal Basis (Gram-Schmidt)
+    # Image of Gram-Schmidt orthonormalization process for coordinate frames
+    x_axis = np.cross(up, z_axis)
+    norm_x = np.linalg.norm(x_axis)
 
-    raw_keypose_df = pd.read_csv(keypose_csv)
+    if norm_x < 1e-6:  # Bone is parallel to reference
+        # Shift reference to avoid gimbal lock in calculation
+        x_axis = np.cross(np.array([1.0, 0.0, 0.0]), z_axis)
+        x_axis /= np.linalg.norm(x_axis) + 1e-6
+    else:
+        x_axis /= norm_x
 
-    keypose_df = raw_keypose_df.melt(
-        id_vars=["subject", "take"],
-        var_name="class_index",
-        value_name="frame_idx"
-    ).dropna(subset=["frame_idx"])
+    y_axis = np.cross(z_axis, x_axis)
 
+    # 4. Construct Rotation Matrix and convert to Euler
+    # Columns are our local coordinate axes
+    rot_matrix = np.stack([x_axis, y_axis, z_axis], axis=1)
+
+    try:
+        rot = Rotation.from_matrix(rot_matrix)
+        # Using ZYX convention (Yaw, Pitch, Roll)
+        euler = rot.as_euler("zyx", degrees=True)
+        return [euler[0], euler[1], euler[2]]
+    except:
+        return [0.0, 0.0, 0.0]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate Dataset from Positions only."
+    )
+    parser.add_argument("--data_path", type=str, default="Data")
+    parser.add_argument("--keypose_csv", type=str, default="assets/keyposes.csv")
+    parser.add_argument("--output_dir", type=str, default="Datasets")
+    parser.add_argument("--num_takes", type=int, default=2)
+    parser.add_argument("--subjects", nargs="+", type=int, default=list(range(1, 11)))
+    parser.add_argument("--downsample_rate", type=int, default=5)
+    parser.add_argument("--n", type=int, default=20)
+    args = parser.parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    output_path = os.path.join(
+        args.output_dir, f"N_{args.n}_Takes_{args.num_takes}.csv"
+    )
+
+    keypose_df = (
+        pd.read_csv(args.keypose_csv)
+        .melt(
+            id_vars=["subject", "take"], var_name="class_index", value_name="frame_idx"
+        )
+        .dropna(subset=["frame_idx"])
+    )
     keypose_df["frame_idx"] = keypose_df["frame_idx"].astype(int)
 
     all_rows = []
-    num_joints = None  # will infer once we load first file
 
-    for sub in subjects:
+    for sub in args.subjects:
         print(f"[INFO] Processing Subject {sub}")
-        subj_dir = os.path.join(data_path, f"Subject{sub}")
+        subj_dir = os.path.join(args.data_path, f"Subject{sub}")
 
-        for take_num in range(1, num_takes + 1):
-            file_path = os.path.join(subj_dir, f"MOCAP_3D_{take_num}.mat")
+        for take_num in range(1, args.num_takes + 1):
+            pos_path = os.path.join(subj_dir, f"MOCAP_3D_{take_num}.mat")
+            if not os.path.exists(pos_path):
+                continue
 
-            mat_file = h5py.File(file_path, "r")
-            mocap_data = mat_file["POSE"]
-            mocap_array = np.transpose(mocap_data, (2, 1, 0))
-            mocap_array = mocap_array[::downsample_rate]
+            with h5py.File(pos_path, "r") as f:
+                mocap_pos = np.transpose(f["POSE"], (2, 1, 0))[:: args.downsample_rate]
+                num_frames = mocap_pos.shape[0]
+                is_labeled = np.zeros(num_frames, dtype=bool)
+                relevant_labels = keypose_df[
+                    (keypose_df["subject"] == sub) & (keypose_df["take"] == take_num)
+                ]
 
-            if num_joints is None:
-                num_joints = mocap_array.shape[1]
+                def process_frame(f_idx):
+                    frame_feats = []
+                    pelvis_p = mocap_pos[f_idx, 12, :3]
+                    for j in range(17):
+                        pos = mocap_pos[f_idx, j, :3] - pelvis_p
+                        pos = [np.round(coord, 2) for coord in pos]
+                        conf = mocap_pos[f_idx, j, 3]
 
-            num_frames = mocap_array.shape[0]
-            is_labeled = np.zeros(num_frames, dtype=bool)
+                        # Derive Euler from kinematic parent
+                        if j in PARENT_MAP:
+                            euler = get_euler_angles_from_points(
+                                mocap_pos[f_idx, j, :3],
+                                mocap_pos[f_idx, PARENT_MAP[j], :3],
+                                pelvis_p,
+                            )
+                            euler = [np.round(angle, 2) for angle in euler]
+                        else:
+                            euler = [0.0, 0.0, 0.0]
 
-            relevant_labels = keypose_df[
-                (keypose_df["subject"] == sub) & (keypose_df["take"] == take_num)
-            ]
+                        frame_feats.extend([*pos, *euler, conf])
+                    return frame_feats
 
-            # Add labeled windows
-            for _, row in relevant_labels.iterrows():
-                center_idx = int(row["frame_idx"] // downsample_rate)
-                start, end = center_idx - n, center_idx + n
+                for _, row in relevant_labels.iterrows():
+                    c = int(row["frame_idx"] // args.downsample_rate)
+                    s, e = max(0, c - args.n), min(num_frames, c + args.n)
+                    is_labeled[s:e] = True
+                    for i in range(s, e):
+                        all_rows.append(
+                            process_frame(i)
+                            + [int(row["class_index"]) + 1, sub, take_num]
+                        )
 
-                start = max(start, 0)
-                end = min(end, num_frames)
-
-                is_labeled[start:end] = True
-
-                # class_index is a column name from melt; ensure int conversion is safe
-                new_label = int(row["class_index"]) + 1
-
-                segment = mocap_array[start:end]
-                for frame in segment:
-                    flat_frame = frame.flatten().tolist()
-                    all_rows.append(flat_frame + [new_label, sub, take_num])
-
-            # Sample transitional frames (label 0)
-            unlabeled_indices = np.where(~is_labeled)[0]
-            num_transitional = min(2 * n, len(unlabeled_indices))
-
-            if num_transitional > 0:
-                sampled_indices = np.random.choice(
-                    unlabeled_indices, size=num_transitional, replace=False
-                )
-                for idx in sampled_indices:
-                    flat_frame = mocap_array[idx].flatten().tolist()
-                    all_rows.append(flat_frame + [0, sub, take_num])
-
-            mat_file.close()
-
-    if num_joints is None:
-        raise RuntimeError("No mocap files were loaded; check your paths/subjects/takes.")
-
-    columns = get_joint_headers(num_joints) + ["Label", "Subject", "Take"]
-    output_df = pd.DataFrame(all_rows, columns=columns)
-    output_df.to_csv(output_path, index=False)
-    print(f"[INFO] Dataset saved to {output_path}")
-    return output_path
+    pd.DataFrame(
+        all_rows, columns=get_joint_headers(17) + ["Label", "Subject", "Take"]
+    ).to_csv(output_path, index=False)
+    print(f"[SUCCESS] Saved to {output_path}")
 
 
 if __name__ == "__main__":
-    # Example direct call (edit values as needed)
-    create_dataset_file(
-        data_path="Data",
-        keypose_csv="assets/keyposes.csv",
-        output_dir="Datasets",
-        num_takes=2,
-        subjects=list(range(1, 11)),
-        downsample_rate=5,
-        n=20,
-        seed=42
-    )
+    main()
