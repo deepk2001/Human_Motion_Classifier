@@ -29,6 +29,8 @@ from model_starter import TraditionalClassifier
 from model_starter import MLP, CNN
 from util import *
 from generate_dataset import *
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import cross_val_score
 
 
 def lda_projection(train_feats, train_labels, test_feats, reg=1e-6):
@@ -86,11 +88,66 @@ def lda_projection(train_feats, train_labels, test_feats, reg=1e-6):
     return pred_train_labels, pred_test_labels
 
 
-def feature_selection(feats):
+def filter_method(feats, labels, topK=30):
+    numFeatures = feats.shape[1]
+    classLabels = np.unique(labels)
+    overallMean = np.mean(feats, axis=0)
+    varianceRatios = np.zeros(numFeatures)
+
+    for i in range(numFeatures):
+        featureCol = feats[:, i]
+        betweenClassVar = 0
+        withinClassVar = 0
+
+        for label in classLabels:
+            classFeats = featureCol[labels == label]
+            classMean = np.mean(classFeats)
+            classSize = classFeats.shape[0]
+
+            betweenClassVar += classSize * (classMean - overallMean[i]) ** 2
+            withinClassVar += np.sum((classFeats - classMean) ** 2)
+
+        varianceRatios[i] = betweenClassVar / (withinClassVar + 1e-6)
+
+    rankedIndices = np.argsort(varianceRatios)[::-1]
+    return rankedIndices[:topK]
+
+
+def wrapper_method(feats, labels, filterIndices, maxFeatures=15):
+    selectedIndices = []
+    remainingIndices = list(filterIndices)
+
+    while len(selectedIndices) < maxFeatures and remainingIndices:
+        bestScore = -1
+        bestFeature = None
+
+        for feature in remainingIndices:
+            currentTrial = selectedIndices + [feature]
+            clf = KNeighborsClassifier(n_neighbors=3)
+
+            # Use 3-fold CV on the training data to evaluate the feature set
+            scores = cross_val_score(clf, feats[:, currentTrial], labels, cv=3)
+            meanScore = np.mean(scores)
+
+            if meanScore > bestScore:
+                bestScore = meanScore
+                bestFeature = feature
+
+        selectedIndices.append(bestFeature)
+        remainingIndices.remove(bestFeature)
+
+    return selectedIndices
+
+
+def feature_selection(feats, labels):
     """
     TODO: Implement Feature Selection
     """
-    raise NotImplementedError
+    topKIndices = filter_method(feats, labels, topK=30)
+
+    finalIndices = wrapper_method(feats, labels, topKIndices, maxFeatures=15)
+    print("reached here")
+    return feats[:, finalIndices]
 
 
 def convert_features_to_loader(
@@ -129,52 +186,6 @@ def convert_features_to_loader(
     return trainLoader, testLoader
 
 
-def cnn_learning(
-    train_feats_proj,
-    train_labels,
-    test_feats_proj,
-    test_labels,
-    hidden_dim=0,
-    batch_size=0,
-    learning_rate=0,
-    epochs=0,
-):
-    """
-        TODO: Train and evaluate a CNN classifier. Refer to deep_learning function for structure. It is almost similar
-    1. Infer `input_dim` from the feature dimension of `train_feats_proj`.
-       - Hint: `train_feats_proj.shape[1]`
-    2. Infer `output_dim` from the labels.
-       - Hint: if labels are 0..C-1 then C = max(train_labels) + 1
-    3. Initialize the CNN model using `CNN(input_dim, output_dim, hidden_dim)`.
-    4. Define the loss function as `nn.CrossEntropyLoss()`.
-    5. Define the optimizer as `optim.Adam(model.parameters(), lr=learning_rate)`.
-    6. Define a learning-rate scheduler using `StepLR(optimizer, step_size=5, gamma=0.1)`.
-    7. Use `convert_features_to_loader(...)` to create `train_loader` and `test_loader`.
-    8. Training loop (repeat for `epochs`):
-       a) Set model to training mode using `model.train()`.
-       b) For each batch from `train_loader`:
-          i)   Zero gradients using `optimizer.zero_grad()`.
-          ii)  Forward pass: `outputs = model(batch_data)`.
-          iii) Compute loss: `loss = criterion(outputs, batch_labels)`.
-          iv)  Backprop: `loss.backward()`.
-          v)   Update parameters: `optimizer.step()`.
-          vi)  Accumulate the batch loss into `total_loss`.
-       c) Step the scheduler once per epoch using `scheduler.step()`.
-       d) Print average loss for the epoch.
-    9. Evaluate on the test set:
-       a) Set model to eval mode using `model.eval()`.
-       b) Disable gradients using `torch.no_grad()`.
-       c) For each batch in `test_loader`:
-          i)   Forward pass and compute predicted class using `torch.max(outputs, 1)`.
-          ii)  Count correct predictions and total samples.
-       d) Compute `test_acc` as percentage and print it.
-    10. (Optional) Evaluate on the training set the same way to compute `train_acc`.
-    11. Return `(model, train_acc, test_acc)`.
-    12. Check the function parameters and fill in appropriate values where indicated.
-
-
-    """
-
 
 # TODO: Parameters value have been left blank. Fill in the parameters with appropriate values
 def deep_learning(
@@ -189,8 +200,13 @@ def deep_learning(
     batch_size=128,
     learning_rate=0.001,
     epochs=100,
+    modelkey="MLP",
 ):
-    model = MLP(input_dim, output_dim, hidden_dim, nn.ReLU, num_layers)
+    models = {
+        "MLP": MLP(input_dim, output_dim, hidden_dim, nn.ReLU, num_layers),
+        "CNN": CNN(input_dim=input_dim, output_dim=output_dim, hidden_dim=hidden_dim),
+    }
+    model = models[modelkey]
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -255,6 +271,7 @@ def perform_traditional(
     classifiers = {
         "traditional_classifier": TraditionalClassifier(),
         "MLP": deep_learning,
+        "CNN": deep_learning,
     }
     trainAccuracy, testAccuracy = 0, 0
     clf = classifiers[key]
@@ -275,7 +292,7 @@ def perform_traditional(
 
         # See example_classification function for plotting confusion matrices and testing on the merged classes
 
-    elif key == "MLP":
+    else:
         # TODO: Call deep learning and CNN function to train and evaluate the model
         input_dim = int(train_feats_proj.shape[1])
         output_dim = int(np.max(train_labels) + 1)
@@ -286,6 +303,7 @@ def perform_traditional(
             test_labels,
             input_dim=input_dim,
             output_dim=output_dim,
+            modelkey=key,
         )
     return trainAccuracy, testAccuracy
 
@@ -332,7 +350,7 @@ def load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["eu
     feats = dataset[:, selected_indices]
 
     # TODO: Feature selection (EXTRA CREDIT). You can comment out the feature selection part if you are not implementing it.
-    # feats = feature_selection(feats)
+    """ feats = feature_selection(feats, labels) """
 
     # Here we just use 0 variance feature removal as an example
     feature_mask = np.var(feats, axis=0) > 0
@@ -524,7 +542,7 @@ def fisher_projection(train_feats, train_labels):
     eigenVectors = eigenVectors[:, idx]
 
     # selecting the top two eigenvectors
-    eigenVectors = eigenVectors[:, :5].real
+    eigenVectors = eigenVectors[:, :45].real
 
     return eigenVectors
 
@@ -551,6 +569,12 @@ def classification(args):
             "accuracyWithoutProjectionTrain": [],
         },
         "MLP": {
+            "accuracyWithProjectionTest": [],
+            "accuracyWithProjectionTrain": [],
+            "accuracyWithoutProjectionTest": [],
+            "accuracyWithoutProjectionTrain": [],
+        },
+        "CNN": {
             "accuracyWithProjectionTest": [],
             "accuracyWithProjectionTrain": [],
             "accuracyWithoutProjectionTest": [],
