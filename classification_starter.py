@@ -244,46 +244,50 @@ def deep_learning(
     return testAccuracy, trainAccuracy
 
 
-def perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_labels):
+def perform_traditional(
+    train_feats_proj,
+    train_labels,
+    test_feats_proj,
+    test_labels,
+    key="traditional_classifier",
+):
 
     classifiers = {
         "traditional_classifier": TraditionalClassifier(),
-        "deep_learning": deep_learning,
+        "MLP": deep_learning,
     }
+    trainAccuracy, testAccuracy = 0, 0
+    clf = classifiers[key]
+    if key == "traditional_classifier":
+        # Train the classifier
+        clf.fit(train_feats_proj, train_labels)
 
-    for name, clf in classifiers.items():
-        if name == "traditional_classifier":
-            print(f"\n--- {name} Classifier ---")
-            # Train the classifier
-            clf.fit(train_feats_proj, train_labels)
+        # Predict the labels of the training and testing data
+        pred_train_labels = clf.predict(train_feats_proj)
+        pred_test_labels = clf.predict(test_feats_proj)
 
-            # Predict the labels of the training and testing data
-            pred_train_labels = clf.predict(train_feats_proj)
-            pred_test_labels = clf.predict(test_feats_proj)
+        # Get statistics
+        trainAccuracy = accuracy_score(train_labels, pred_train_labels) * 100
+        testAccuracy = accuracy_score(test_labels, pred_test_labels) * 100
 
-            # Get statistics
-            train_accuracy = accuracy_score(train_labels, pred_train_labels) * 100
-            test_accuracy = accuracy_score(test_labels, pred_test_labels) * 100
+        print(f"KNN Train Accuracy: {trainAccuracy:.2f}%")
+        print(f"KNN Test Accuracy: {testAccuracy:.2f}%")
 
-            print(f"KNN Train Accuracy: {train_accuracy:.2f}%")
-            print(f"KNN Test Accuracy: {test_accuracy:.2f}%")
+        # See example_classification function for plotting confusion matrices and testing on the merged classes
 
-            return train_accuracy, test_accuracy
-            # See example_classification function for plotting confusion matrices and testing on the merged classes
-
-        else:
-            # TODO: Call deep learning and CNN function to train and evaluate the model
-            input_dim = int(train_feats_proj.shape[1])
-            output_dim = int(np.max(train_labels) + 1)
-            testAccuracy, trainAccuracy = clf(
-                train_feats_proj,
-                train_labels,
-                test_feats_proj,
-                test_labels,
-                input_dim=input_dim,
-                output_dim=output_dim,
-            )
-            return trainAccuracy, testAccuracy
+    elif key == "MLP":
+        # TODO: Call deep learning and CNN function to train and evaluate the model
+        input_dim = int(train_feats_proj.shape[1])
+        output_dim = int(np.max(train_labels) + 1)
+        testAccuracy, trainAccuracy = clf(
+            train_feats_proj,
+            train_labels,
+            test_feats_proj,
+            test_labels,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
+    return trainAccuracy, testAccuracy
 
 
 def load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["euler"]):
@@ -538,38 +542,65 @@ def classification(args):
     - Repeat this process for all subjects.
     - Then find the average of all 10 subjects to get the final accuracy score
     """
-    numSubjects = 10
-    accuracyWithProjectionTest = []
-    accuracyWithProjectionTrain = []
-    accuracyWithoutProjectionTest = []
-    accuracyWithoutProjectionTrain = []
+    numSubjects = 1
+    accuracyMetrics = {
+        "traditional_classifier": {
+            "accuracyWithProjectionTest": [],
+            "accuracyWithProjectionTrain": [],
+            "accuracyWithoutProjectionTest": [],
+            "accuracyWithoutProjectionTrain": [],
+        },
+        "MLP": {
+            "accuracyWithProjectionTest": [],
+            "accuracyWithProjectionTrain": [],
+            "accuracyWithoutProjectionTest": [],
+            "accuracyWithoutProjectionTrain": [],
+        },
+    }
+
     for subject in range(numSubjects):
-        train_feats, train_labels, test_feats, test_labels = load_new_dataset(
+        trainFeats, trainLabels, testFeats, testLabels = load_new_dataset(
             dataset_path="Datasets/N_20_Takes_2.csv",
             subject_index=subject + 1,
             features=args.features,
         )
-        train_accuracy, test_accuracy = perform_traditional(
-            train_feats, train_labels, test_feats, test_labels
-        )
-        accuracyWithoutProjectionTest.append(test_accuracy)
-        accuracyWithoutProjectionTrain.append(train_accuracy)
-        train_eigens = fisher_projection(train_feats, train_labels)
-        train_feats_proj = train_feats @ train_eigens
-        test_feats_proj = test_feats @ train_eigens
-        train_accuracy, test_accuracy = perform_traditional(
-            train_feats_proj, train_labels, test_feats_proj, test_labels
-        )
-        accuracyWithProjectionTest.append(test_accuracy)
-        accuracyWithProjectionTrain.append(train_accuracy)
+        for key in accuracyMetrics.keys():
+            # 1. Evaluate without projection
+            # Note: Your perform_traditional returns a tuple, ensure it matches this unpacking
+            trainAcc, testAcc = perform_traditional(
+                trainFeats, trainLabels, testFeats, testLabels, key=key
+            )
+            accuracyMetrics[key]["accuracyWithoutProjectionTest"].append(testAcc)
+            accuracyMetrics[key]["accuracyWithoutProjectionTrain"].append(trainAcc)
 
-    print("LOSO Mean accuracies ------------------")
-    print(f"Accuracy with projection test: {np.mean(accuracyWithProjectionTest)}")
-    print(f"Accuracy with projection train: {np.mean(accuracyWithProjectionTrain)}")
-    print(f"Accuracy without projection test: {np.mean(accuracyWithoutProjectionTest)}")
-    print(
-        f"Accuracy without projection train: {np.mean(accuracyWithoutProjectionTrain)}"
-    )
+            # 2. Apply Fisher Projection
+            trainEigens = fisher_projection(trainFeats, trainLabels)
+            trainFeatsProj = trainFeats @ trainEigens
+            testFeatsProj = testFeats @ trainEigens
+
+            # 3. Evaluate with projection
+            trainAcc, testAcc = perform_traditional(
+                trainFeatsProj, trainLabels, testFeatsProj, testLabels, key=key
+            )
+            accuracyMetrics[key]["accuracyWithProjectionTest"].append(testAcc)
+            accuracyMetrics[key]["accuracyWithProjectionTrain"].append(trainAcc)
+
+    print("\nLOSO Mean Accuracies ------------------")
+    for name, metrics in accuracyMetrics.items():
+        print(f"\nClassifier: {name}")
+        # Using bracket notation to access the lists inside metrics
+        print(
+            f"  With Projection Test:  {np.mean(metrics['accuracyWithProjectionTest']):.2f}%"
+        )
+        print(
+            f"  With Projection Train: {np.mean(metrics['accuracyWithProjectionTrain']):.2f}%"
+        )
+        print(
+            f"  No Projection Test:    {np.mean(metrics['accuracyWithoutProjectionTest']):.2f}%"
+        )
+        print(
+            f"  No Projection Train:   {np.mean(metrics['accuracyWithoutProjectionTrain']):.2f}%"
+        )
 
 
 def main():
