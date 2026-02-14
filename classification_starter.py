@@ -560,7 +560,7 @@ def classification(args):
     - Repeat this process for all subjects.
     - Then find the average of all 10 subjects to get the final accuracy score
     """
-    numSubjects = 1
+    numSubjects = 10
     accuracyMetrics = {
         "traditional_classifier": {
             "accuracyWithProjectionTest": [],
