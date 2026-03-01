@@ -2,6 +2,8 @@
 Your Details: (The below details should be included in every python
 file that you add code to.)
 {
+    Name : Deep Hiren Kotecha
+    email: djk6507@psu.edu
 }
 """
 
@@ -20,6 +22,7 @@ from sklearn.metrics import (
     confusion_matrix,
     ConfusionMatrixDisplay,
     classification_report,
+    f1_score,
 )
 from sklearn.metrics import accuracy_score
 from model_starter import MLP
@@ -88,7 +91,11 @@ def lda_projection(train_feats, train_labels, test_feats, reg=1e-6):
     return pred_train_labels, pred_test_labels
 
 
-def filter_method(feats, labels, topK=30):
+def filter_method(feats, labels, topK=15):
+    """
+    Ranks features by Variance Ratio without changing the shape of feats.
+    Returns the INDICES of the topK features.
+    """
     numFeatures = feats.shape[1]
     classLabels = np.unique(labels)
     overallMean = np.mean(feats, axis=0)
@@ -101,6 +108,8 @@ def filter_method(feats, labels, topK=30):
 
         for label in classLabels:
             classFeats = featureCol[labels == label]
+            if len(classFeats) < 2:
+                continue
             classMean = np.mean(classFeats)
             classSize = classFeats.shape[0]
 
@@ -120,6 +129,7 @@ def wrapper_method(feats, labels, filterIndices, maxFeatures=15):
     while len(selectedIndices) < maxFeatures and remainingIndices:
         bestScore = -1
         bestFeature = None
+        print(len(selectedIndices))
 
         for feature in remainingIndices:
             currentTrial = selectedIndices + [feature]
@@ -139,15 +149,21 @@ def wrapper_method(feats, labels, filterIndices, maxFeatures=15):
     return selectedIndices
 
 
-def feature_selection(feats, labels):
+def feature_selection(feats, labels, method="filter"):
     """
-    TODO: Implement Feature Selection
+    Utilization Hub: Returns the indices to keep based on the method requested.
+    The shape of the 'feats' passed in is preserved.
     """
-    topKIndices = filter_method(feats, labels, topK=30)
-
-    finalIndices = wrapper_method(feats, labels, topKIndices, maxFeatures=15)
-    print("reached here")
-    return feats[:, finalIndices]
+    if method == "filter":
+        return filter_method(feats, labels, topK=15)
+    elif method == "wrapper":
+        # Step 1: Statistical ranking (Filter) to reduce search space for speed
+        topKIndices = filter_method(feats, labels, topK=30)
+        # Step 2: Search within those indices using the Wrapper
+        return wrapper_method(feats, labels, topKIndices, maxFeatures=15)
+    else:
+        # Return all indices if no selection is requested
+        return np.arange(feats.shape[1])
 
 
 def convert_features_to_loader(
@@ -168,23 +184,15 @@ def convert_features_to_loader(
 
     """
     trainFeatsTensor = torch.tensor(train_feats_proj, dtype=torch.float32)
-
     trainLabelsTensor = torch.tensor(train_labels, dtype=torch.long)
-
     trainDataset = TensorDataset(trainFeatsTensor, trainLabelsTensor)
-
     trainLoader = DataLoader(trainDataset, batch_size=batch_size, shuffle=True)
-
     testFeatsTensor = torch.tensor(test_feats_proj, dtype=torch.float32)
-
     testLabelsTensor = torch.tensor(test_labels, dtype=torch.long)
-
     testDataset = TensorDataset(testFeatsTensor, testLabelsTensor)
-
     testLoader = DataLoader(testDataset, batch_size=batch_size, shuffle=False)
 
     return trainLoader, testLoader
-
 
 
 # TODO: Parameters value have been left blank. Fill in the parameters with appropriate values
@@ -233,31 +241,31 @@ def deep_learning(
 
     # Evaluation
     model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for batch_data, batch_labels in test_loader:
-            outputs = model(batch_data)
-            _, predicted = torch.max(outputs, 1)
-            total += batch_labels.size(0)
-            correct += (predicted == batch_labels).sum().item()
-
-    testAccuracy = correct / total * 100
-    print(f"Deep Learning Test Accuracy: {testAccuracy:.2f}%")
-
-    correct = 0
-    total = 0
+    all_preds = []
+    all_labels = []
     with torch.no_grad():
         for batch_data, batch_labels in train_loader:
             outputs = model(batch_data)
             _, predicted = torch.max(outputs, 1)
-            total += batch_labels.size(0)
-            correct += (predicted == batch_labels).sum().item()
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
 
-    trainAccuracy = correct / total * 100
-    print(f"Deep Learning Train Accuracy: {trainAccuracy:.2f}%")
+    trainAccuracy = accuracy_score(all_labels, all_preds) * 100
+    trainF1 = f1_score(all_labels, all_preds, average="macro")
 
-    return testAccuracy, trainAccuracy
+    model.eval()
+    all_preds = []
+    all_labels = []
+    with torch.no_grad():
+        for batch_data, batch_labels in test_loader:
+            outputs = model(batch_data)
+            _, predicted = torch.max(outputs, 1)
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
+
+    testAccuracy = accuracy_score(all_labels, all_preds) * 100
+    testF1 = f1_score(all_labels, all_preds, average="macro")
+    return trainAccuracy, testAccuracy, trainF1, testF1
 
 
 def perform_traditional(
@@ -265,7 +273,7 @@ def perform_traditional(
     train_labels,
     test_feats_proj,
     test_labels,
-    key="traditional_classifier",
+    key="traditional_classifier-w_filter",
 ):
 
     classifiers = {
@@ -274,18 +282,35 @@ def perform_traditional(
         "CNN": deep_learning,
     }
     trainAccuracy, testAccuracy = 0, 0
-    clf = classifiers[key]
-    if key == "traditional_classifier":
+    trainF1Score, testF1Score = 0, 0
+    config = key.split("-")
+    clf = classifiers[config[0]]
+    if "traditional_classifier" in key:
+
+        featureSelectionMethod = config[1].split("_")[1]
+        print(f"\n\n{key}\n\n")
+        train_feats_proj_copy = train_feats_proj
+        test_feats_proj_copy = test_feats_proj
+        selected_idx = feature_selection(
+            train_feats_proj_copy, train_labels, method=featureSelectionMethod
+        )
+        train_feats_proj_feats = train_feats_proj_copy[:, selected_idx]
+        test_feats_proj_feats = test_feats_proj_copy[:, selected_idx]
+
         # Train the classifier
-        clf.fit(train_feats_proj, train_labels)
+        clf.fit(train_feats_proj_feats, train_labels)
 
         # Predict the labels of the training and testing data
-        pred_train_labels = clf.predict(train_feats_proj)
-        pred_test_labels = clf.predict(test_feats_proj)
+        pred_train_labels = clf.predict(train_feats_proj_feats)
+        pred_test_labels = clf.predict(test_feats_proj_feats)
 
         # Get statistics
         trainAccuracy = accuracy_score(train_labels, pred_train_labels) * 100
+
         testAccuracy = accuracy_score(test_labels, pred_test_labels) * 100
+
+        trainF1Score = f1_score(train_labels, pred_train_labels, average="macro")
+        testF1Score = f1_score(test_labels, pred_test_labels, average="macro")
 
         print(f"KNN Train Accuracy: {trainAccuracy:.2f}%")
         print(f"KNN Test Accuracy: {testAccuracy:.2f}%")
@@ -296,7 +321,7 @@ def perform_traditional(
         # TODO: Call deep learning and CNN function to train and evaluate the model
         input_dim = int(train_feats_proj.shape[1])
         output_dim = int(np.max(train_labels) + 1)
-        testAccuracy, trainAccuracy = clf(
+        testAccuracy, trainAccuracy, trainF1Score, testF1Score = clf(
             train_feats_proj,
             train_labels,
             test_feats_proj,
@@ -305,7 +330,7 @@ def perform_traditional(
             output_dim=output_dim,
             modelkey=key,
         )
-    return trainAccuracy, testAccuracy
+    return trainAccuracy, testAccuracy, trainF1Score, testF1Score
 
 
 def load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["euler"]):
@@ -348,9 +373,6 @@ def load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["eu
 
     # Feature extraction based on selected features
     feats = dataset[:, selected_indices]
-
-    # TODO: Feature selection (EXTRA CREDIT). You can comment out the feature selection part if you are not implementing it.
-    """ feats = feature_selection(feats, labels) """
 
     # Here we just use 0 variance feature removal as an example
     feature_mask = np.var(feats, axis=0) > 0
@@ -562,23 +584,45 @@ def classification(args):
     """
     numSubjects = 10
     accuracyMetrics = {
-        "traditional_classifier": {
+        "traditional_classifier-w_filter": {
             "accuracyWithProjectionTest": [],
             "accuracyWithProjectionTrain": [],
             "accuracyWithoutProjectionTest": [],
             "accuracyWithoutProjectionTrain": [],
+            "f1WithProjectionTest": [],
+            "f1WithProjectionTrain": [],
+            "f1WithoutProjectionTest": [],
+            "f1WithoutProjectionTrain": [],
+        },
+        "traditional_classifier-w_wrapper": {
+            "accuracyWithProjectionTest": [],
+            "accuracyWithProjectionTrain": [],
+            "accuracyWithoutProjectionTest": [],
+            "accuracyWithoutProjectionTrain": [],
+            "f1WithProjectionTest": [],
+            "f1WithProjectionTrain": [],
+            "f1WithoutProjectionTest": [],
+            "f1WithoutProjectionTrain": [],
         },
         "MLP": {
             "accuracyWithProjectionTest": [],
             "accuracyWithProjectionTrain": [],
             "accuracyWithoutProjectionTest": [],
             "accuracyWithoutProjectionTrain": [],
+            "f1WithProjectionTest": [],
+            "f1WithProjectionTrain": [],
+            "f1WithoutProjectionTest": [],
+            "f1WithoutProjectionTrain": [],
         },
         "CNN": {
             "accuracyWithProjectionTest": [],
             "accuracyWithProjectionTrain": [],
             "accuracyWithoutProjectionTest": [],
             "accuracyWithoutProjectionTrain": [],
+            "f1WithProjectionTest": [],
+            "f1WithProjectionTrain": [],
+            "f1WithoutProjectionTest": [],
+            "f1WithoutProjectionTrain": [],
         },
     }
 
@@ -591,11 +635,13 @@ def classification(args):
         for key in accuracyMetrics.keys():
             # 1. Evaluate without projection
             # Note: Your perform_traditional returns a tuple, ensure it matches this unpacking
-            trainAcc, testAcc = perform_traditional(
+            trainAcc, testAcc, trainF1, testF1 = perform_traditional(
                 trainFeats, trainLabels, testFeats, testLabels, key=key
             )
             accuracyMetrics[key]["accuracyWithoutProjectionTest"].append(testAcc)
             accuracyMetrics[key]["accuracyWithoutProjectionTrain"].append(trainAcc)
+            accuracyMetrics[key]["f1WithoutProjectionTest"].append(testF1)
+            accuracyMetrics[key]["f1WithoutProjectionTrain"].append(trainF1)
 
             # 2. Apply Fisher Projection
             trainEigens = fisher_projection(trainFeats, trainLabels)
@@ -603,28 +649,51 @@ def classification(args):
             testFeatsProj = testFeats @ trainEigens
 
             # 3. Evaluate with projection
-            trainAcc, testAcc = perform_traditional(
+            trainAcc, testAcc, trainF1, testF1 = perform_traditional(
                 trainFeatsProj, trainLabels, testFeatsProj, testLabels, key=key
             )
             accuracyMetrics[key]["accuracyWithProjectionTest"].append(testAcc)
             accuracyMetrics[key]["accuracyWithProjectionTrain"].append(trainAcc)
+            accuracyMetrics[key]["f1WithProjectionTest"].append(testF1)
+            accuracyMetrics[key]["f1WithProjectionTrain"].append(trainF1)
 
-    print("\nLOSO Mean Accuracies ------------------")
-    for name, metrics in accuracyMetrics.items():
-        print(f"\nClassifier: {name}")
-        # Using bracket notation to access the lists inside metrics
-        print(
-            f"  With Projection Test:  {np.mean(metrics['accuracyWithProjectionTest']):.2f}%"
-        )
-        print(
-            f"  With Projection Train: {np.mean(metrics['accuracyWithProjectionTrain']):.2f}%"
-        )
-        print(
-            f"  No Projection Test:    {np.mean(metrics['accuracyWithoutProjectionTest']):.2f}%"
-        )
-        print(
-            f"  No Projection Train:   {np.mean(metrics['accuracyWithoutProjectionTrain']):.2f}%"
-        )
+        print("\nLOSO Mean Accuracy and F1 Score (Mean ± SD) ------------------")
+        for name, metrics in accuracyMetrics.items():
+            print(f"\nClassifier: {name}")
+
+            # Helper to format Mean ± SD
+            def format_metric(data):
+                return f"{np.mean(data):.2f} ± {np.std(data):.2f}"
+
+            # Accuracy Prints
+            print(
+                f"  Accuracy (With Projection Test):  {format_metric(metrics['accuracyWithProjectionTest'])}"
+            )
+            print(
+                f"  Accuracy (No Projection Test):    {format_metric(metrics['accuracyWithoutProjectionTest'])}"
+            )
+
+            print(
+                f"  Accuracy (With Projection Train): {format_metric(metrics['accuracyWithProjectionTrain'])}"
+            )
+            print(
+                f"  Accuracy (No Projection Train):   {format_metric(metrics['accuracyWithoutProjectionTrain'])}"
+            )
+
+            # F1 Score Prints
+            print(
+                f"  F1 Score (With Projection Test):  {format_metric(metrics['f1WithProjectionTest'])}"
+            )
+            print(
+                f"  F1 Score (No Projection Test):    {format_metric(metrics['f1WithoutProjectionTest'])}"
+            )
+
+            print(
+                f"  F1 Score (With Projection Train):  {format_metric(metrics['f1WithProjectionTrain'])}"
+            )
+            print(
+                f"  F1 Score (No Projection Train):    {format_metric(metrics['f1WithoutProjectionTrain'])}"
+            )
 
 
 def main():
