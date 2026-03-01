@@ -36,6 +36,10 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_score
 
 
+globalArgs = parse_args()
+with open("assets/class_info.json", "r") as f:
+    globalClassInfo = json.load(f)
+
 def lda_projection(train_feats, train_labels, test_feats, reg=1e-6):
     X = train_feats
     y = train_labels
@@ -263,8 +267,32 @@ def deep_learning(
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(batch_labels.cpu().numpy())
 
+    sub_dir = "_".join(globalArgs.features)
+    results_dir = os.path.join("results", sub_dir)
+
+    plot_conf_mat(
+        targets=all_labels,
+        predictions=all_preds,
+        title="LDA Testing Confusion Matrix (Unmerged)",
+        filename=f"unmerged_test_confusion_matrix_{modelkey}.png",
+        class_names=globalClassInfo["names"]["short_unmerged"],
+        save_prefix="LDA",
+        results_dir=results_dir,
+    )
+
     testAccuracy = accuracy_score(all_labels, all_preds) * 100
     testF1 = f1_score(all_labels, all_preds, average="macro")
+
+    plot_conf_mat(
+        targets=all_labels,
+        predictions=all_preds,
+        title="LDA Testing Confusion Matrix (Unmerged)",
+        filename=f"unmerged_test_confusion_matrix_{modelkey}.png",
+        class_names=globalClassInfo["names"]["short_unmerged"],
+        save_prefix="LDA",
+        results_dir=results_dir,
+    )
+
     return trainAccuracy, testAccuracy, trainF1, testF1
 
 
@@ -311,6 +339,28 @@ def perform_traditional(
 
         trainF1Score = f1_score(train_labels, pred_train_labels, average="macro")
         testF1Score = f1_score(test_labels, pred_test_labels, average="macro")
+
+        sub_dir = "_".join(globalArgs.features)
+        results_dir = os.path.join("results", sub_dir)
+
+        plot_conf_mat(
+            targets=train_labels,
+            predictions=pred_train_labels,
+            title="LDA Training Confusion Matrix (Unmerged)",
+            filename=f"unmerged_test_confusion_matrix_{key}.png",
+            class_names=globalClassInfo["names"]["short_unmerged"],
+            save_prefix="LDA",
+            results_dir=results_dir,
+        )
+        plot_conf_mat(
+            targets=test_labels,
+            predictions=pred_test_labels,
+            title="LDA Testing Confusion Matrix (Unmerged)",
+            filename=f"unmerged_test_confusion_matrix_{key}.png",
+            class_names=globalClassInfo["names"]["short_unmerged"],
+            save_prefix="LDA",
+            results_dir=results_dir,
+        )
 
         print(f"KNN Train Accuracy: {trainAccuracy:.2f}%")
         print(f"KNN Test Accuracy: {testAccuracy:.2f}%")
@@ -657,53 +707,44 @@ def classification(args):
             accuracyMetrics[key]["f1WithProjectionTest"].append(testF1)
             accuracyMetrics[key]["f1WithProjectionTrain"].append(trainF1)
 
-        print("\nLOSO Mean Accuracy and F1 Score (Mean ± SD) ------------------")
-        for name, metrics in accuracyMetrics.items():
-            print(f"\nClassifier: {name}")
+    file_id = "_".join(globalArgs.features)
+    output_file = f"metrics_{file_id}.txt"
+    with open(output_file, "w", encoding="utf-8") as f:
+        header = "\nLOSO Mean Accuracy and F1 Score (Mean ± SD) ------------------"
+        print(header)
+        f.write(header + "\n")
 
+        for name, metrics in accuracyMetrics.items():
             # Helper to format Mean ± SD
             def format_metric(data):
                 return f"{np.mean(data):.2f} ± {np.std(data):.2f}"
 
-            # Accuracy Prints
-            print(
-                f"  Accuracy (With Projection Test):  {format_metric(metrics['accuracyWithProjectionTest'])}"
-            )
-            print(
-                f"  Accuracy (No Projection Test):    {format_metric(metrics['accuracyWithoutProjectionTest'])}"
-            )
+            # Construct the block of text for this classifier
+            output_block = [
+                f"\nClassifier: {name}",
+                f"  Accuracy (With Projection Test):  {format_metric(metrics['accuracyWithProjectionTest'])}",
+                f"  Accuracy (No Projection Test):    {format_metric(metrics['accuracyWithoutProjectionTest'])}",
+                f"  Accuracy (With Projection Train): {format_metric(metrics['accuracyWithProjectionTrain'])}",
+                f"  Accuracy (No Projection Train):   {format_metric(metrics['accuracyWithoutProjectionTrain'])}",
+                f"  F1 Score (With Projection Test):  {format_metric(metrics['f1WithProjectionTest'])}",
+                f"  F1 Score (No Projection Test):    {format_metric(metrics['f1WithoutProjectionTest'])}",
+                f"  F1 Score (With Projection Train): {format_metric(metrics['f1WithProjectionTrain'])}",
+                f"  F1 Score (No Projection Train):   {format_metric(metrics['f1WithoutProjectionTrain'])}"
+            ]
 
-            print(
-                f"  Accuracy (With Projection Train): {format_metric(metrics['accuracyWithProjectionTrain'])}"
-            )
-            print(
-                f"  Accuracy (No Projection Train):   {format_metric(metrics['accuracyWithoutProjectionTrain'])}"
-            )
+            # Join the block with newlines and print/write
+            full_text = "\n".join(output_block)
+            print(full_text)
+            f.write(full_text + "\n")
 
-            # F1 Score Prints
-            print(
-                f"  F1 Score (With Projection Test):  {format_metric(metrics['f1WithProjectionTest'])}"
-            )
-            print(
-                f"  F1 Score (No Projection Test):    {format_metric(metrics['f1WithoutProjectionTest'])}"
-            )
-
-            print(
-                f"  F1 Score (With Projection Train):  {format_metric(metrics['f1WithProjectionTrain'])}"
-            )
-            print(
-                f"  F1 Score (No Projection Train):    {format_metric(metrics['f1WithoutProjectionTrain'])}"
-            )
+    print(f"\n--- Results successfully saved to {output_file} ---")
 
 
 def main():
-    args = parse_args()
-    with open("assets/class_info.json", "r") as f:
-        class_info = json.load(f)
-    example_classification(args=args, class_info=class_info)
+    example_classification(args=globalArgs, class_info=globalClassInfo)
 
     # TODO: Call the classification function to perform LOSO classification
-    classification(args=args)
+    classification(args=globalArgs)
 
 
 if __name__ == "__main__":
