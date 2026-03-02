@@ -213,6 +213,7 @@ def deep_learning(
     learning_rate=0.001,
     epochs=100,
     modelkey="MLP",
+    projection="LDA",
 ):
     models = {
         "MLP": MLP(input_dim, output_dim, hidden_dim, nn.ReLU, num_layers),
@@ -273,10 +274,10 @@ def deep_learning(
     plot_conf_mat(
         targets=all_labels,
         predictions=all_preds,
-        title="LDA Testing Confusion Matrix (Unmerged)",
+        title=f"{projection} Testing Confusion Matrix (Unmerged)",
         filename=f"unmerged_train_confusion_matrix_{modelkey}.png",
         class_names=globalClassInfo["names"]["short_unmerged"],
-        save_prefix="LDA",
+        save_prefix=projection,
         results_dir=results_dir,
     )
 
@@ -286,10 +287,10 @@ def deep_learning(
     plot_conf_mat(
         targets=all_labels,
         predictions=all_preds,
-        title="LDA Testing Confusion Matrix (Unmerged)",
+        title=f"{projection} Testing Confusion Matrix (Unmerged)",
         filename=f"unmerged_test_confusion_matrix_{modelkey}.png",
         class_names=globalClassInfo["names"]["short_unmerged"],
-        save_prefix="LDA",
+        save_prefix=projection,
         results_dir=results_dir,
     )
 
@@ -302,6 +303,7 @@ def perform_traditional(
     test_feats_proj,
     test_labels,
     key="traditional_classifier-w_filter",
+    projection="LDA",
 ):
 
     classifiers = {
@@ -346,10 +348,10 @@ def perform_traditional(
         plot_conf_mat(
             targets=train_labels,
             predictions=pred_train_labels,
-            title="LDA Training Confusion Matrix (Unmerged)",
+            title=f"{projection} Training Confusion Matrix (Unmerged)",
             filename=f"unmerged_train_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
-            save_prefix="LDA",
+            save_prefix=projection,
             results_dir=results_dir,
         )
         plot_conf_mat(
@@ -358,7 +360,7 @@ def perform_traditional(
             title="LDA Testing Confusion Matrix (Unmerged)",
             filename=f"unmerged_test_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
-            save_prefix="LDA",
+            save_prefix=projection,
             results_dir=results_dir,
         )
 
@@ -379,6 +381,7 @@ def perform_traditional(
             input_dim=input_dim,
             output_dim=output_dim,
             modelkey=key,
+            projection=projection,
         )
     return trainAccuracy, testAccuracy, trainF1Score, testF1Score
 
@@ -685,7 +688,12 @@ def classification(args):
         for key in accuracyMetrics.keys():
             # 1. Evaluate without projection
             trainAcc, testAcc, trainF1, testF1 = perform_traditional(
-                trainFeats, trainLabels, testFeats, testLabels, key=key
+                trainFeats,
+                trainLabels,
+                testFeats,
+                testLabels,
+                key=key,
+                projection="Unprojected",
             )
             accuracyMetrics[key]["accuracyWithoutProjectionTest"].append(testAcc)
             accuracyMetrics[key]["accuracyWithoutProjectionTrain"].append(trainAcc)
@@ -699,7 +707,12 @@ def classification(args):
 
             # 3. Evaluate with projection
             trainAcc, testAcc, trainF1, testF1 = perform_traditional(
-                trainFeatsProj, trainLabels, testFeatsProj, testLabels, key=key
+                trainFeatsProj,
+                trainLabels,
+                testFeatsProj,
+                testLabels,
+                key=key,
+                projection="LDA",
             )
             accuracyMetrics[key]["accuracyWithProjectionTest"].append(testAcc)
             accuracyMetrics[key]["accuracyWithProjectionTrain"].append(trainAcc)
@@ -742,7 +755,7 @@ def classification(args):
 
 
 def main():
-    example_classification(args=globalArgs, class_info=globalClassInfo)
+    # example_classification(args=globalArgs, class_info=globalClassInfo)
 
     # TODO: Call the classification function to perform LOSO classification
     classification(args=globalArgs)
