@@ -4,8 +4,11 @@
 
 We suggest setting up a virtual environment for this project. This may be done using Conda or Python's built-in `venv` module. For example, using `venv`, you can create and activate a virtual environment as follows:
 
-```bashpython -m venv prml
-source prml/bin/activate  # On Windows, use `prml\Scripts\activate`
+```bash
+python -m venv .venv
+source .venv/bin/activate  
+# On Windows, use 
+.venv\Scripts\activate
 ```
 
 To install PyTorch, you can follow the instructions on the [official PyTorch website](https://pytorch.org/get-started/locally/). Make sure to select the appropriate options for your system (e.g., operating system, package manager, Python version, and CUDA version if applicable).

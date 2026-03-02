@@ -49,26 +49,16 @@ def plot_conf_mat(
     save_prefix="",
     normalize="true",
 ):
-    """
-    Plot and save a single normalized confusion matrix.
-
-    Args:
-        targets (array-like): Ground truth labels
-        predictions (array-like): Predicted labels
-        title (str): Plot title
-        filename (str): Base filename (without .png)
-        class_names (list, optional): List of class names indexed by label
-        save_prefix (str, optional): Prefix added to filename
-        normalize (str or None): Passed to sklearn confusion_matrix
-    """
-
-    cm = confusion_matrix(targets, predictions, normalize=normalize)
-
     os.makedirs(results_dir, exist_ok=True)
-
     fig, ax = plt.subplots(figsize=(16, 14))
 
+    
     unique_indices = np.unique(targets)
+
+    cm = confusion_matrix(
+        targets, predictions, labels=unique_indices, normalize=normalize
+    )
+
     if class_names is not None:
         display_labels = [class_names[i] for i in unique_indices]
     else:
@@ -78,12 +68,20 @@ def plot_conf_mat(
 
     disp.plot(ax=ax, xticks_rotation="vertical", include_values=False, cmap="viridis")
 
+    
+    ax.set_xticks(np.arange(len(display_labels)))
+    ax.set_xticklabels(display_labels, rotation="vertical")
+    ax.set_yticks(np.arange(len(display_labels)))
+    ax.set_yticklabels(display_labels)
+
     disp.im_.set_clim(0, 1)
     ax.tick_params(axis="both", which="major", labelsize=9)
     ax.set_title(title, fontsize=18)
 
-    cbar = ax.images[-1].colorbar
-    cbar.set_label("Recall (Proportion of Correct Predictions)", fontsize=12)
+    if disp.im_.colorbar:
+        disp.im_.colorbar.set_label(
+            "Recall (Proportion of Correct Predictions)", fontsize=12
+        )
 
     plt.tight_layout()
 

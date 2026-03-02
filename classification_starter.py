@@ -40,6 +40,7 @@ globalArgs = parse_args()
 with open("assets/class_info.json", "r") as f:
     globalClassInfo = json.load(f)
 
+
 def lda_projection(train_feats, train_labels, test_feats, reg=1e-6):
     X = train_feats
     y = train_labels
@@ -347,7 +348,7 @@ def perform_traditional(
             targets=train_labels,
             predictions=pred_train_labels,
             title="LDA Training Confusion Matrix (Unmerged)",
-            filename=f"unmerged_test_confusion_matrix_{key}.png",
+            filename=f"unmerged_test_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
             save_prefix="LDA",
             results_dir=results_dir,
@@ -356,7 +357,7 @@ def perform_traditional(
             targets=test_labels,
             predictions=pred_test_labels,
             title="LDA Testing Confusion Matrix (Unmerged)",
-            filename=f"unmerged_test_confusion_matrix_{key}.png",
+            filename=f"unmerged_test_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
             save_prefix="LDA",
             results_dir=results_dir,
@@ -707,6 +708,8 @@ def classification(args):
             accuracyMetrics[key]["f1WithProjectionTest"].append(testF1)
             accuracyMetrics[key]["f1WithProjectionTrain"].append(trainF1)
 
+            print(f"\n\n ------- Completed Iteration {subject + 1} ----------------")
+
     file_id = "_".join(globalArgs.features)
     output_file = f"metrics_{file_id}.txt"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -729,7 +732,7 @@ def classification(args):
                 f"  F1 Score (With Projection Test):  {format_metric(metrics['f1WithProjectionTest'])}",
                 f"  F1 Score (No Projection Test):    {format_metric(metrics['f1WithoutProjectionTest'])}",
                 f"  F1 Score (With Projection Train): {format_metric(metrics['f1WithProjectionTrain'])}",
-                f"  F1 Score (No Projection Train):   {format_metric(metrics['f1WithoutProjectionTrain'])}"
+                f"  F1 Score (No Projection Train):   {format_metric(metrics['f1WithoutProjectionTrain'])}",
             ]
 
             # Join the block with newlines and print/write
