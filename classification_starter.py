@@ -708,7 +708,7 @@ def classification(args):
             accuracyMetrics[key]["f1WithProjectionTest"].append(testF1)
             accuracyMetrics[key]["f1WithProjectionTrain"].append(trainF1)
 
-            print(f"\n\n ------- Completed Iteration {subject + 1} ----------------")
+        print(f"\n\n ------- Completed Iteration {subject + 1} ----------------")
 
     file_id = "_".join(globalArgs.features)
     output_file = f"metrics_{file_id}.txt"
