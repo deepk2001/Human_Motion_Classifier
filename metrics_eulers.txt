@@ -1,0 +1,42 @@
+
+LOSO Mean Accuracy and F1 Score (Mean ± SD) ------------------
+
+Classifier: traditional_classifier-w_filter
+  Accuracy (With Projection Test):  57.68 ± 3.62
+  Accuracy (No Projection Test):    53.82 ± 2.78
+  Accuracy (With Projection Train): 95.17 ± 0.32
+  Accuracy (No Projection Train):   96.09 ± 0.17
+  F1 Score (With Projection Test):  0.57 ± 0.04
+  F1 Score (No Projection Test):    0.52 ± 0.03
+  F1 Score (With Projection Train): 0.95 ± 0.00
+  F1 Score (No Projection Train):   0.96 ± 0.00
+
+Classifier: traditional_classifier-w_wrapper
+  Accuracy (With Projection Test):  59.11 ± 3.39
+  Accuracy (No Projection Test):    69.08 ± 4.25
+  Accuracy (With Projection Train): 95.28 ± 0.16
+  Accuracy (No Projection Train):   96.04 ± 0.23
+  F1 Score (With Projection Test):  0.58 ± 0.04
+  F1 Score (No Projection Test):    0.68 ± 0.05
+  F1 Score (With Projection Train): 0.95 ± 0.00
+  F1 Score (No Projection Train):   0.96 ± 0.00
+
+Classifier: MLP
+  Accuracy (With Projection Test):  57.79 ± 4.99
+  Accuracy (No Projection Test):    66.36 ± 4.29
+  Accuracy (With Projection Train): 65.71 ± 1.45
+  Accuracy (No Projection Train):   87.40 ± 0.38
+  F1 Score (With Projection Test):  0.55 ± 0.05
+  F1 Score (No Projection Test):    0.65 ± 0.05
+  F1 Score (With Projection Train): 0.65 ± 0.02
+  F1 Score (No Projection Train):   0.87 ± 0.00
+
+Classifier: CNN
+  Accuracy (With Projection Test):  59.96 ± 3.87
+  Accuracy (No Projection Test):    62.00 ± 4.73
+  Accuracy (With Projection Train): 72.11 ± 0.75
+  Accuracy (No Projection Train):   69.77 ± 0.80
+  F1 Score (With Projection Test):  0.58 ± 0.04
+  F1 Score (No Projection Test):    0.60 ± 0.05
+  F1 Score (With Projection Train): 0.72 ± 0.01
+  F1 Score (No Projection Train):   0.69 ± 0.01
