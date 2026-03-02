@@ -200,7 +200,6 @@ def convert_features_to_loader(
     return trainLoader, testLoader
 
 
-# TODO: Parameters value have been left blank. Fill in the parameters with appropriate values
 def deep_learning(
     train_feats_proj,
     train_labels,
@@ -275,7 +274,7 @@ def deep_learning(
         targets=all_labels,
         predictions=all_preds,
         title="LDA Testing Confusion Matrix (Unmerged)",
-        filename=f"unmerged_test_confusion_matrix_{modelkey}.png",
+        filename=f"unmerged_train_confusion_matrix_{modelkey}.png",
         class_names=globalClassInfo["names"]["short_unmerged"],
         save_prefix="LDA",
         results_dir=results_dir,
@@ -348,7 +347,7 @@ def perform_traditional(
             targets=train_labels,
             predictions=pred_train_labels,
             title="LDA Training Confusion Matrix (Unmerged)",
-            filename=f"unmerged_test_confusion_matrix_{key}",
+            filename=f"unmerged_train_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
             save_prefix="LDA",
             results_dir=results_dir,
@@ -506,7 +505,7 @@ def example_classification(args, class_info):
         save_prefix="LDA",
         results_dir=results_dir,
     )
-    # Alternatively, you can use the class indices instead of names
+    # Alternatively, can use the class indices instead of names
     plot_conf_mat(
         targets=test_labels,
         predictions=pred_test_labels,
@@ -685,7 +684,6 @@ def classification(args):
         )
         for key in accuracyMetrics.keys():
             # 1. Evaluate without projection
-            # Note: Your perform_traditional returns a tuple, ensure it matches this unpacking
             trainAcc, testAcc, trainF1, testF1 = perform_traditional(
                 trainFeats, trainLabels, testFeats, testLabels, key=key
             )
