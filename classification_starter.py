@@ -372,7 +372,7 @@ def perform_traditional(
         # TODO: Call deep learning and CNN function to train and evaluate the model
         input_dim = int(train_feats_proj.shape[1])
         output_dim = int(np.max(train_labels) + 1)
-        testAccuracy, trainAccuracy, trainF1Score, testF1Score = clf(
+        trainAccuracy, testAccuracy, trainF1Score, testF1Score = clf(
             train_feats_proj,
             train_labels,
             test_feats_proj,
