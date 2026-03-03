@@ -5,7 +5,7 @@
 We suggest setting up a virtual environment for this project. This may be done using Conda or Python's built-in `venv` module. For example, using `venv`, you can create and activate a virtual environment as follows:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate  
 # On Windows, use 
 .venv\Scripts\activate
@@ -16,7 +16,7 @@ To install PyTorch, you can follow the instructions on the [official PyTorch web
 Once you have your virtual environment and PyTorch set up and activated, you can install the required dependencies using pip:
 
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ## Dataset Generation
@@ -50,7 +50,9 @@ We provide a sample function that performs classification on a single subject wi
 To quickly run the provided code, after creating an environment and installing PyTorch, you may run:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate # my system is Mac, please use the windows counterpart if your system requires it
+pip3 install -r requirements.txt
 python generate_dataset.py --n 20 --downsample_rate 5 --num_takes 2
-python classification_starter.py --features positions
+python classification_starter.py --features  eulers  --dataset_path Datasets/N_20_Takes_2.csv --traditional_model KNN
 ```

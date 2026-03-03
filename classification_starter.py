@@ -357,7 +357,7 @@ def perform_traditional(
         plot_conf_mat(
             targets=test_labels,
             predictions=pred_test_labels,
-            title="LDA Testing Confusion Matrix (Unmerged)",
+            title=f"{projection} Testing Confusion Matrix (Unmerged)",
             filename=f"unmerged_test_confusion_matrix_{key}",
             class_names=globalClassInfo["names"]["short_unmerged"],
             save_prefix=projection,
@@ -680,8 +680,13 @@ def classification(args):
     }
 
     for subject in range(numSubjects):
+        dataset_path = "Datasets/N_20_Takes_2.csv"
+        if(args.dataset_path):
+            dataset_path = args.dataset_path
+        
+
         trainFeats, trainLabels, testFeats, testLabels = load_new_dataset(
-            dataset_path="Datasets/N_20_Takes_2.csv",
+            dataset_path=dataset_path,
             subject_index=subject + 1,
             features=args.features,
         )

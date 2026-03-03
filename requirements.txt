@@ -1,4 +1,7 @@
 numpy
 pandas
 matplotlib
-sklearn
+scikit-learn
+scipy
+h5py
+torch
