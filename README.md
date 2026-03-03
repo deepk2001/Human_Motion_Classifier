@@ -56,3 +56,66 @@ pip3 install -r requirements.txt
 python generate_dataset.py --n 20 --downsample_rate 5 --num_takes 2
 python classification_starter.py --features  eulers  --dataset_path Datasets/N_20_Takes_2.csv --traditional_model KNN
 ```
+
+
+# Function Descriptions
+
+## classification_starter.py
+
+### `load_new_dataset(dataset_path, verbose=False, subject_index=9, features=["euler"])`
+Loads the dataset from the given path, selects requested feature types (e.g., positions, eulers), removes zero-variance features, and performs Leave-One-Subject-Out (LOSO) splitting into training and testing sets.
+
+---
+
+### `lda_projection(train_feats, train_labels, test_feats, reg=1e-6)`
+Implements Linear Discriminant Analysis (LDA) classification. Computes within-class and between-class scatter matrices, estimates class priors, and returns predicted labels for both training and test sets.
+
+---
+
+### `fisher_projection(train_feats, train_labels)`
+Computes Fisher’s Linear Discriminant projection matrix for dimensionality reduction. Returns the top eigenvectors used to project features into a lower-dimensional LDA space.
+
+---
+
+### `filter_method(feats, labels, topK=15)`
+Performs statistical feature ranking using variance ratio (between-class variance / within-class variance). Returns indices of the top-ranked features.
+
+---
+
+### `wrapper_method(feats, labels, filterIndices, maxFeatures=15)`
+Performs wrapper-based feature selection using KNN with cross-validation. Iteratively selects features that maximize validation accuracy.
+
+---
+
+### `feature_selection(feats, labels, method="filter")`
+Feature selection hub function. Calls either filter-based or wrapper-based feature selection and returns selected feature indices.
+
+---
+
+### `convert_features_to_loader(train_feats_proj, train_labels, test_feats_proj, test_labels, batch_size)`
+Converts NumPy feature arrays into PyTorch tensors and creates DataLoader objects for training and testing.
+
+---
+
+### `deep_learning(train_feats_proj, train_labels, test_feats_proj, test_labels, ...)`
+Trains and evaluates deep learning models (MLP or CNN). Performs training, testing, computes accuracy and macro F1 score, and generates confusion matrices.
+
+---
+
+### `perform_traditional(train_feats_proj, train_labels, test_feats_proj, test_labels, key, projection)`
+Handles training and evaluation for traditional classifiers and deep learning models. Applies optional feature selection and returns accuracy and F1 metrics.
+
+---
+
+### `example_classification(args, class_info)`
+Demonstrates LDA classification for a single subject split. Computes both unmerged and merged class performance and generates confusion matrices.
+
+---
+
+### `classification(args)`
+Main evaluation pipeline. Performs LOSO cross-validation across all subjects, evaluates all classifiers with and without LDA projection, aggregates metrics, and saves final results.
+
+---
+
+### `main()`
+Entry point of the program. Calls the full LOSO classification pipeline.
